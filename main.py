@@ -37,7 +37,7 @@ def print_menu():
     print('9. Exit')
 #endregion
 
-db = 'inventory.sqlite'
+db = 'inventory.db'
 #region TABLE creation code
 # (cur, con) = open_db(db)
 # cur.execute("CREATE TABLE Items \
@@ -97,70 +97,50 @@ while True:
     if choice == 1:  # create item
         n_sku = input('SKU >> ').upper()
         n_title = input('Title >> ')
-        (cur, con) = open_db(db)
-        cur.execute("INSERT into Items (sku, title) VALUES (?,?)", (n_sku, n_title))
-        close_db(con)
+        new_item = Item(sku=n_sku, title=n_title)
+        session.add(new_item)
+        session.commit()
 
     elif choice == 2:  # create bin
         n_name = input('Name >> ').upper()
         n_bin_shelf = input('What shelf will the bin be on >> ').upper()
-        (cur, con) = open_db(db)
-        cur.execute(
-            "INSERT into Bins (name, shelf_id) VALUES (?,(SELECT shelf_id FROM Shelves WHERE name=?))",
-            [n_name, n_bin_shelf]
-        )
-        close_db(con)
+        n_shelf_id = session.query(Shelf).filter(Shelf.name == n_bin_shelf).one()
+        new_bin = Bin(name=n_name, shelf_id=n_shelf_id.shelf_id)
+        session.add(new_bin)
+        session.commit()
 
     elif choice == 3:  # create shelf
         n_name = input('Name >> ').upper()
-        (cur, con) = open_db(db)
-        cur.execute("INSERT into Shelves (name) VALUES (?)", [n_name])
-        close_db(con)
+        new_shelf = Shelf(name=n_name)
+        session.add(new_shelf)
+        session.commit()
 
     elif choice == 4:  # add item to bin
-        in_bin = int(input('Enter the id of the bin you are adding to >> '))
-        in_item = int(input('Enter the id of the item your adding to a bin >> '))
-        in_qty = int(input('Enter the qty you are adding (Enter a negative to remove) >> '))
-        (cur, con) = open_db(db)
-        cur.execute("INSERT into Bin_Contents (bin_id, item_id, qty) VALUES (?,?,?)", (in_bin, in_item, in_qty))
-        close_db(con)
+        in_bin = input('Bin name >> ')
+        in_item = input('SKU >> ')
+        in_qty = int(input('Enter the qty you are adding >> '))
+        b = session.query(Bin).filter(Bin.name == in_bin).one()
+        i = session.query(Item).filter(Item.sku == in_item).one()
+        new_adjust = BinItem(bin_id=b.bin_id, item_id=i.item_id, qty=in_qty)
+        session.add(new_adjust)
+        session.commit()
 
     elif choice == 5:  # Display bin contents
         q_bin = input('What bin >> ').upper()
-        (cur, con) = open_db(db)
-        results = cur.execute(
-            "SELECT \
-            i.sku, \
-            i.title, \
-            bc.qty \
-            FROM Items i \
-            INNER JOIN Bin_Contents bc \
-              on bc.item_id = i.item_id \
-            INNER JOIN Bins b \
-              on bc.bin_id = b.bin_id \
-            WHERE b.name = ?", [q_bin]
-        )
-        response = results.fetchall()
-        print(response)
+        results = session.query(BinItem, Item, Bin).\
+            join(Item, BinItem.item_id == Item.item_id).\
+            join(Bin, BinItem.bin_id == Bin.bin_id).\
+            filter(Bin.name == q_bin)
+        for row in results:
+            print(row[1].sku, row[1].title, row[0].qty)
 
-    elif choice == 6:
+    elif choice == 6:  # Item and it's locations
         q_item = input('Enter the SKU of the item you\'re looking for >> ').upper()
-        (cur, con) = open_db(db)
-        results = cur.execute(
-            "SELECT \
-            i.sku, \
-            i.title, \
-            b.name, \
-            bc.qty \
-            FROM Items i \
-            INNER JOIN Bin_Contents bc \
-              on bc.item_id = i.item_id \
-            INNER JOIN Bins b \
-              on bc.bin_id = b.bin_id \
-            WHERE i.sku = ?", [q_item]
-        )
-        response = results.fetchall()
-        for row in response:
-            print(row)
+        results = session.query(BinItem, Item, Bin).\
+            join(Item, BinItem.item_id == Item.item_id).\
+            join(Bin, BinItem.bin_id == Bin.bin_id).\
+            filter(Item.sku == q_item)
+        for row in results:
+            print(row[1].sku, row[1].title, row[2].name, row[0].qty)
     elif choice == 9:
         exit(0)
